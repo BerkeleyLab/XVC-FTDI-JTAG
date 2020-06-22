@@ -1,0 +1,109 @@
+.\" Copyright 2020, Lawrence Berkeley National Laboratory
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions are met:
+.\"
+.\" 1. Redistributions of source code must retain the above copyright notice,
+.\" this list of conditions and the following disclaimer.
+.\"
+.\" 2. Redistributions in binary form must reproduce the above copyright notice,
+.\" this list of conditions and the following disclaimer in the documentation
+.\" and/or other materials provided with the distribution.
+.\"
+.\" 3. Neither the name of the copyright holder nor the names of its
+.\" contributors may be used to endorse or promote products derived from this
+.\" software without specific prior written permission.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS
+.\" AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+.\" BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+.\" FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+.\" HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+.\" SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+.\" TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+.\" PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+.\" LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+.\" NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+.\" SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.TH FTDI_JTAG 1 2020-06-12 "LBNL" "Lawrence Berkeley National Laboratory"
+.SH NAME
+ftdiJTAG \- Xilinx Virtual Cable Server for FTDI 4232H
+.SH SYNOPSIS
+.nh
+.ad l
+.TP 9.1em
+.B ftdiJTAG
+.RB [ \-a\ address ]
+.RB [ \-p\ port ]
+.RB [ \-d\ vendor:product\fR[\fB:serial\fR] ]
+.RB [ \-g\ direction:value\fR[\fB:value...\fR]\fB ]
+.RB [ \-c\ frequency ]
+.RB [ \-q ]
+.RB [ \-u ]
+.RB [ \-x ]
+.RB [ \-B ]
+.RB [ \-S ]
+.hy
+.SH DESCRIPTION
+This server converts Xilinx Virtual Cable requests to FTDI 4232H USB commands.
+.IP \-a\ address
+Address of network interface on which to listen for connections from XVC clients.  Default is 127.0.0.1 (localhost).  Specify 0.0.0.0 to listen on all networks.
+.IP \-p\ port
+TCP port number on which to listen.  Default is 2542.
+.IP \-d\ vendor:product[:serial]
+USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.
+.IP \-g\ direction:value[:value...]
+Direction and value of the most significant four bits of the FTDI general-purpose I/O port, in hexadecimal (0-9, a-f, A-F).  A set bit in the direction configures the corresponding pin as an output.  By default all four pins are input.  Multiple values will be written one after the other separated by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
+.IP \-c\ frequency
+Lock the JTAG clock at the specified frequency (ignore XVC settck: commands).
+The numeric frequency argument can be followed by a 'k' or an 'M' to multiply the value by 1000 or 1000000, respectively.
+.IP -q
+Quiet mode.  Don't print USB device information on startup nor client connect/disconnect messages during operation.  Useful when running this server in the background or as a daemon.
+.IP -u
+Enable diagnostic messages for USB transactions.
+.IP -x
+Enable diagnostic messages for Xilinx virtual cable transactions.
+.IP -B
+Use FTDI port B as the JTAG interface rather than the default port A.
+.IP -S
+Show I/O statistics when client disconnects.
+.SH USAGE
+The Xilinx hardware manager does not automatically detect the presence of this server.  The following procedure is required after starting the server.
+.IP Vivado:
+Click 'Open Hardware Manager'.
+.br
+Click 'Open Target'.
+.br
+Click 'Open New Target...'.
+.br
+In the 'Open New Hardware Target' window that pops up, click 'Next>'.
+.br
+Set the menu to 'Connect to Local server', then click 'Next>'.
+This menu item must be chosen even if the server was started on a different machine.
+.br
+If the desired device is not present in the 'Hardware Targets" table, click the 'Add Xilinx Virtual Cable (XVC)' button and set the IP address and port corresponding to this server.
+.br
+Ensure that the desired device is highlighted in the 'Hardware Targets" table, then click 'Next>'.
+.br
+Click 'Finish'.
+.IP Vitis:
+Open the XSCT console.
+.br
+Enter the command "connect -xvc-url localhost:2542"
+.br
+Specify the "Local" connection when offered the option, for example in the "Program FPGA" window.
+.SH REFERENCES
+.nh
+.IP 1. 3em
+https:/\:/\:www.xilinx.com/\:support/\:documentation/\:application_notes/\:xapp1251-xvc-zynq-petalinux.pdf
+.IP 2.
+https://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT4232H.pdf
+.IP 3.
+https:/\:/\:www.ftdichip.com/\:Support/\:Documents/\:AppNotes/\:AN_108_Command_Processor_for_MPSSE_and_MCU_Host_Bus_Emulation_Modes.pdf
+.IP 4.
+https://libusb.info
+.SH CAVEATS
+The Xilinx virtual cable protocol provides no means for the server to validate or authenticate a client.  Be very careful when specifying an address and port accessible from the wider internet.
+.PP
+Tests show that the Xilinx hw_server using the new protocol programs devices about three times faster than this server.
