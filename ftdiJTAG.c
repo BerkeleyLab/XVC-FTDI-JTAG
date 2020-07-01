@@ -896,11 +896,6 @@ connectUSB(usbInfo *usb)
     ssize_t n;
     int s;
 
-    s = libusb_init(&usb->usb);
-   if (s != 0) {
-       fprintf(stderr, "libusb_init() failed: %s\n", libusb_strerror(s));
-       return 0;
-    }
     n = libusb_get_device_list(usb->usb, &list);
     if (n < 0) {
         fprintf(stderr, "libusb_get_device_list failed: %s", libusb_strerror((int)n));
@@ -1047,8 +1042,13 @@ main(int argc, char **argv)
         fprintf(stderr, "Unexpected argument.\n");
         usage(argv[0]);
     }
+    s = libusb_init(&usb->usb);
     if (!connectUSB(usb)) {
         exit(1);
+    }
+    if (s != 0) {
+        fprintf(stderr, "libusb_init() failed: %s\n", libusb_strerror(s));
+        return 0;
     }
     if ((s = createSocket(bindAddress, port)) < 0) {
         exit(1);
@@ -1063,6 +1063,9 @@ main(int argc, char **argv)
             fprintf(stderr, "Can't accept connection: %s\n", strerror (errno));
             exit(1);
         }
+        if ((usb->handle == NULL) && !connectUSB(usb)) {
+            exit(1);
+        }
         usb->shiftCount = 0;
         usb->chunkCount = 0;
         usb->bitCount = 0;
@@ -1074,6 +1077,7 @@ main(int argc, char **argv)
         if (fp == NULL) {
             fprintf(stderr, "fdopen failed: %s\n", strerror(errno));
             close(fd);
+            exit(2);
         }
         else {
             processCommands(fp, fd, usb);
@@ -1087,5 +1091,7 @@ main(int argc, char **argv)
                 printf("     Bits: %" PRIu64 "\n", usb->bitCount);
             }
         }
+        libusb_close(usb->handle);
+        usb->handle = NULL;
     }
 }
