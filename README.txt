@@ -37,6 +37,11 @@ You will have to edit the Makefile if you want to install the executable
 and manual page in non-default locations, or if your C compiler doesn't
 find the libusb header or library.
 
+EXAMPLES
+========
+LBNL Marble Mini: -c 15M -g 1:1
+Xilinx ZCU111: -c 15M -g 4:4    (or -g 4:0:4 to generate power-on reset)
+
 LICENSE
 =======
 Copyright 2020, Lawrence Berkeley National Laboratory
