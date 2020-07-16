@@ -39,8 +39,8 @@ find the libusb header or library.
 
 EXAMPLES
 ========
-LBNL Marble Mini: -c 15M -g 1:1
-Xilinx ZCU111: -c 15M -g 4:4    (or -g 4:0:4 to generate power-on reset)
+LBNL Marble Mini: -c 30M -g 1:1
+   Xilinx ZCU111: -c 30M -g 4:4    (-g 4:0:4 to generate power-on reset)
 
 LICENSE
 =======
