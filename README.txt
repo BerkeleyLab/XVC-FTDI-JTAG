@@ -40,7 +40,7 @@ find the libusb header or library.
 EXAMPLES
 ========
      LBNL Marble: -c 30M -g 1:1    (Applies to Marble Mini, too)
-   Xilinx ZCU111: -c 30M -g 4:4    (-g 4:0:4 to generate power-on reset)
+   Xilinx ZCU111: -c 30M -g C:C    (-g C:8:C to generate power-on reset)
 
 LICENSE
 =======
