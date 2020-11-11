@@ -973,9 +973,6 @@ deviceConfig(usbInfo *usb, const char *str)
          && (product <= 0xFFFF)) {
              if (*endp == ':') {
                 usb->serialNumber = endp + 1;
-                if (*usb->serialNumber == '\0') {
-                    usb->serialNumber = NULL;
-                }
             }
             usb->vendorId = vendor;
             usb->productId = product;
