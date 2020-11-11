@@ -979,7 +979,7 @@ deviceConfig(usbInfo *usb, const char *str)
             return;
         }
     }
-    fprintf(stderr, "Bad -d vendor:product[:serial]\n");
+    fprintf(stderr, "Bad -d vendor:product[:[serial]]\n");
     exit(2);
 }
 
