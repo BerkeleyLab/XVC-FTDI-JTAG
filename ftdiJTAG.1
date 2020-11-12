@@ -52,7 +52,7 @@ Address of network interface on which to listen for connections from XVC clients
 .IP \-p\ port
 TCP port number on which to listen.  Default is 2542.
 .IP \-d\ vendor:product[:[serial]]
-USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.
+USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.  Vendor and product numbers are in hexadecimal.
 .IP \-g\ direction:value[:value...]
 Direction and value of the most significant four bits of the FTDI general-purpose I/O port, in hexadecimal (0-9, a-f, A-F).  A set bit in the direction configures the corresponding pin as an output.  By default all four pins are input.  Multiple values will be written one after the other separated by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
 .IP \-c\ frequency
@@ -82,17 +82,17 @@ In the 'Open New Hardware Target' window that pops up, click 'Next>'.
 Set the menu to 'Connect to Local server', then click 'Next>'.
 This menu item must be chosen even if the server was started on a different machine.
 .br
-If the desired device is not present in the 'Hardware Targets" table, click the 'Add Xilinx Virtual Cable (XVC)' button and set the IP address and port corresponding to this server.
+If the desired device is not present in the 'Hardware Targets' table, click the 'Add Xilinx Virtual Cable (XVC)' button and set the IP address and port corresponding to this server.
 .br
-Ensure that the desired device is highlighted in the 'Hardware Targets" table, then click 'Next>'.
+Ensure that the desired device is highlighted in the 'Hardware Targets' table, then click 'Next>'.
 .br
 Click 'Finish'.
 .IP Vitis:
 Open the XSCT console.
 .br
-Enter the command "connect -xvc-url localhost:2542"
+Enter the command 'connect -xvc-url localhost:2542'
 .br
-Specify the "Local" connection when offered the option, for example in the "Program FPGA" window.
+Specify the 'Local' connection when offered the option, for example in the 'Program FPGA' window.
 .SH REFERENCES
 .nh
 .IP 1. 3em
