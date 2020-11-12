@@ -941,7 +941,7 @@ static void
 usage(char *name)
 {
     fprintf(stderr, "Usage: %s [-a address] [-p port] "
-         "[-d vendor:product[:serial]] [-g direction:value[:value...]] [-c frequency] [-q] [-u] [-x] [-B] [-S]\n", name);
+         "[-d vendor:product[:[serial]]] [-g direction:value[:value...]] [-c frequency] [-q] [-u] [-x] [-B] [-S]\n", name);
     exit(2);
 }
 
