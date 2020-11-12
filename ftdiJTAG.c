@@ -923,7 +923,7 @@ connectUSB(usbInfo *usb)
         if (usb->showUSB || !usb->quietFlag) {
             printf(" Vendor (%04X): %s\n", usb->vendorId, usb->deviceVendorString);
             printf("Product (%04X): %s\n", usb->productId, usb->deviceProductString);
-            printf("        Serial: %s\n", usb->deviceSerialString);
+            printf("        Serial: \"%s\"\n", usb->deviceSerialString);
             fflush(stdout);
         }
     }
