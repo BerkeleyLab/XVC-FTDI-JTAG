@@ -54,7 +54,7 @@ TCP port number on which to listen.  Default is 2542.
 .IP \-d\ vendor:product[:[serial]]
 USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.  Vendor and product numbers are in hexadecimal.
 .IP \-g\ direction:value[:value...]
-Direction and value of the most significant four bits of the FTDI general-purpose I/O port, in hexadecimal (0-9, a-f, A-F).  A set bit in the direction configures the corresponding pin as an output.  By default all four pins are input.  Multiple values will be written one after the other separated by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
+Direction and value of the most significant four bits of the FTDI general-purpose I/O port, in hexadecimal (0-9, a-f, A-F).  A set bit in the direction configures the corresponding pin as an output.  By default all four pins are inputs.  Multiple values will be written one after the other separated by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
 .IP \-c\ frequency
 Lock the JTAG clock at the specified frequency (ignore XVC settck: commands).
 The numeric frequency argument can be followed by a 'k' or an 'M' to multiply the value by 1000 or 1000000, respectively.
@@ -90,7 +90,7 @@ Click 'Finish'.
 .IP Vitis:
 Open the XSCT console.
 .br
-Enter the command 'connect -xvc-url localhost:2542'
+Enter the command 'connect -xvc-url localhost:2542' (substitute the appropriate host and port information if the server is not using the defaults).
 .br
 Specify the 'Local' connection when offered the option, for example in the 'Program FPGA' window.
 .SH REFERENCES
