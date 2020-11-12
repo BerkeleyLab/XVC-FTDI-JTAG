@@ -36,7 +36,7 @@ ftdiJTAG \- Xilinx Virtual Cable Server for FTDI 4232H
 .B ftdiJTAG
 .RB [ \-a\ address ]
 .RB [ \-p\ port ]
-.RB [ \-d\ vendor:product\fR[\fB:serial\fR] ]
+.RB [ \-d\ vendor:product\fR[\fB:\fR[\fBserial\fR]] ]
 .RB [ \-g\ direction:value\fR[\fB:value...\fR]\fB ]
 .RB [ \-c\ frequency ]
 .RB [ \-q ]
@@ -51,7 +51,7 @@ This server converts Xilinx Virtual Cable requests to FTDI 4232H USB commands.
 Address of network interface on which to listen for connections from XVC clients.  Default is 127.0.0.1 (localhost).  Specify 0.0.0.0 to listen on all networks.
 .IP \-p\ port
 TCP port number on which to listen.  Default is 2542.
-.IP \-d\ vendor:product[:serial]
+.IP \-d\ vendor:product[:[serial]]
 USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.
 .IP \-g\ direction:value[:value...]
 Direction and value of the most significant four bits of the FTDI general-purpose I/O port, in hexadecimal (0-9, a-f, A-F).  A set bit in the direction configures the corresponding pin as an output.  By default all four pins are input.  Multiple values will be written one after the other separated by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
