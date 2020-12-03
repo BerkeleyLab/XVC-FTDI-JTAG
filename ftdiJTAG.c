@@ -308,7 +308,7 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
                         getDeviceStrings(usb, &desc);
                         if ((usb->serialNumber == NULL)
                          || (strcmp(usb->serialNumber,
-                             usb->deviceSerialString) == 0)) {
+                                    usb->deviceSerialString) == 0)) {
                             getEndpoints(usb, iface_desc);
                             libusb_free_config_descriptor(config);
                             return 1;
