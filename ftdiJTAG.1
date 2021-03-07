@@ -37,7 +37,7 @@ ftdiJTAG \- Xilinx Virtual Cable Server for FTDI 4232H
 .RB [ \-a\ address ]
 .RB [ \-p\ port ]
 .RB [ \-d\ vendor:product\fR[\fB:\fR[\fBserial\fR]] ]
-.RB [ \-g\ direction:value\fR[\fB:value...\fR]\fB ]
+.RB [ \-g\ DirectionValue\fR[\fB:DirectionValue...\fR]\fB ]
 .RB [ \-c\ frequency ]
 .RB [ \-q ]
 .RB [ \-u ]
@@ -53,9 +53,18 @@ Address of network interface on which to listen for connections from XVC clients
 TCP port number on which to listen.  Default is 2542.
 .IP \-d\ vendor:product[:[serial]]
 USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.  Vendor and product numbers are in hexadecimal.
-.IP \-g\ direction:value[:value...]
-Direction and value of the most significant four bits of the FTDI general-purpose I/O port, in hexadecimal (0-9, a-f, A-F).  A set bit in the direction configures the corresponding pin as an output.  By default all four pins are inputs.  Multiple values will be written one after the other separated by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
-.IP \-c\ frequency
+.IP \-g\ DirectionValue[:DirectionValue...]
+Colon-separated pairs of hexadecimal values (0x00 to 0xFF) specifying the direction and state
+of the most significant four bits of the FTDI general-purpose I/O port.
+The first value of each pair sets the directions and the
+second value sets the states of the four I/O port bits..
+A one bit in the direction configures the corresponding bit in the port as an output.
+A zero bit in the direction configures the corresponding bit in the port as an input.
+The least significant bit in the direction and state value is applied to bit 4 of the I/O port and the most significant bit to bit 7 of the I/O port.
+By default all four pins are inputs.
+Multiple direcion/state pairs take effect in turn separated
+by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
+.IP \-c\ f
 Lock the JTAG clock at the specified frequency (ignore XVC settck: commands).
 The numeric frequency argument can be followed by a 'k' or an 'M' to multiply the value by 1000 or 1000000, respectively.
 .IP -q

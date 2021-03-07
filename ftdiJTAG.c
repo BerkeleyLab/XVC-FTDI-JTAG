@@ -444,34 +444,34 @@ ftdiSetClockSpeed(usbInfo *usb, unsigned int frequency)
 static int
 ftdiGPIO(usbInfo *usb)
 {
-    unsigned long direction, value;
+    unsigned long value;
+    unsigned int direction;
     const char *str = usb->gpioArgument;
     char *endp;
     static const struct timespec ms100 = { .tv_sec = 0, .tv_nsec = 100000000 };
 
     usb->ioBuf[0] = FTDI_SET_LOW_BYTE;
-    direction = strtol(str, &endp, 16);
-    if ((endp != str) && (*endp == ':')) {
-        for (;;) {
-            str = endp + 1;
-            value = strtol(str, &endp, 16);
-            if ((endp == str) || ((*endp != '\0') && (*endp != ':'))) {
-                break;
-            }
-            if ((direction > 0xF) || (value > 0xF)) {
-                break;
-            }
-            usb->ioBuf[1] = (value << 4) | FTDI_PIN_TMS;
-            usb->ioBuf[2] = (direction << 4) |
-                                     FTDI_PIN_TMS | FTDI_PIN_TDI | FTDI_PIN_TCK;
-            if (!usbWriteData(usb, usb->ioBuf, 3)) {
-                break;
-            }
-            if (*endp == '\0') {
-                return 1;
-            }
-            nanosleep(&ms100, NULL);
+    for (;;) {
+        value = strtol(str, &endp, 16);
+        if ((endp == str) || ((*endp != '\0') && (*endp != ':'))) {
+            break;
         }
+        str = endp + 1;
+        if (value > 0xFFF) {
+            break;
+        }
+        direction = value >> 4;
+        value &= 0xF;
+        usb->ioBuf[1] = (value << 4) | FTDI_PIN_TMS;
+        usb->ioBuf[2] = (direction << 4) |
+                                 FTDI_PIN_TMS | FTDI_PIN_TDI | FTDI_PIN_TCK;
+        if (!usbWriteData(usb, usb->ioBuf, 3)) {
+            break;
+        }
+        if (*endp == '\0') {
+            return 1;
+        }
+        nanosleep(&ms100, NULL);
     }
     return 0;
 }
