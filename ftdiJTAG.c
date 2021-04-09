@@ -291,7 +291,7 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
             continue;
         if (config == NULL)
             continue;
-        if (config->bNumInterfaces == 4) {
+        if (config->bNumInterfaces >= usb->ftdiJTAGindex) {
             const struct libusb_interface *iface =
                                        &config->interface[usb->ftdiJTAGindex-1];
             for (k = 0 ; k < iface->num_altsetting ; k++) {
