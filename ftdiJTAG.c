@@ -99,6 +99,7 @@
 #define FTDI_SET_TCK_DIVISOR        0x86
 #define FTDI_SEND_IMMEDIATE         0x87
 #define FTDI_DISABLE_TCK_PRESCALER  0x8A
+#define FTDI_ACK_BAD_COMMAND        0xFA
 
 /* FTDI I/O pin bits */
 #define FTDI_PIN_TCK    0x1
@@ -373,7 +374,8 @@ usbReadData(usbInfo *usb, unsigned char *buf, int nWant)
     const unsigned char *base = buf;
 
     while (nWant) {
-        int nRecv, nCopy, s;
+        int nRecv, s;
+        const unsigned char *src = usb->ioBuf;
         s = libusb_bulk_transfer(usb->handle, usb->bulkInEndpointAddress,
                                    usb->ioBuf, sizeof usb->ioBuf, &nRecv, 1000);
         if (s) {
@@ -381,15 +383,27 @@ usbReadData(usbInfo *usb, unsigned char *buf, int nWant)
             return 0;
         }
         if (nRecv <= 2) {
-            fprintf(stderr, "Runt (%d)\n", nRecv);
+            fprintf(stderr, "wanted:%d want:%d got:%d", nWanted, nWant, nRecv);
+            if (nRecv >= 1) {
+                fprintf(stderr, " [%02X", src[0]);
+                if (nRecv >= 2) {
+                    fprintf(stderr, " %02X", src[1]);
+                }
+                fprintf(stderr, "]");
+            }
+            fprintf(stderr, "\n");
+            exit(1);
             continue;
         }
-        /* Skip FTDI status bytes */
-        nCopy = nRecv - 2;
-        if (nCopy > nWant) nCopy = nWant;
-        memcpy(buf, usb->ioBuf + 2, nCopy);
-        nWant -= nCopy;
-        buf += nCopy;
+        else {
+            /* Skip FTDI status bytes */
+            nRecv -= 2;
+            src += 2;
+        }
+        if (nRecv > nWant) nRecv = nWant;
+        memcpy(buf, src, nRecv);
+        nWant -= nRecv;
+        buf += nRecv;
     }
     if (usb->showUSB) {
         showBuf("Rx", base, nWanted);
