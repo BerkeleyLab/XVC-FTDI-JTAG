@@ -97,8 +97,8 @@
 #define FTDI_ENABLE_LOOPBACK        0x84
 #define FTDI_DISABLE_LOOPBACK       0x85
 #define FTDI_SET_TCK_DIVISOR        0x86
-#define FTDI_SEND_IMMEDIATE         0x87
 #define FTDI_DISABLE_TCK_PRESCALER  0x8A
+#define FTDI_DISABLE_3_PHASE_CLOCK  0x8D
 #define FTDI_ACK_BAD_COMMAND        0xFA
 
 /* FTDI I/O pin bits */
@@ -495,6 +495,7 @@ ftdiInit(usbInfo *usb)
 {
     static unsigned char startup[] = {
         FTDI_DISABLE_LOOPBACK,
+        FTDI_DISABLE_3_PHASE_CLOCK,
         FTDI_SET_LOW_BYTE,
         FTDI_PIN_TMS,
         FTDI_PIN_TMS | FTDI_PIN_TDI | FTDI_PIN_TCK
