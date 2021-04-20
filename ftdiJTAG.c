@@ -976,7 +976,7 @@ convertInt(const char *str)
 static void
 deviceConfig(usbInfo *usb, const char *str)
 {
-    long vendor, product;
+    unsigned long vendor, product;
     char *endp;
     vendor = strtol(str, &endp, 16);
     if ((endp != str) && (*endp == ':')) {
