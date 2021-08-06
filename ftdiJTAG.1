@@ -104,3 +104,5 @@ https://libusb.info
 The Xilinx virtual cable protocol provides no means for the server to validate or authenticate a client.  Be very careful when specifying an address and port accessible from the wider internet.
 .PP
 Tests show that the Xilinx hw_server using the new protocol programs devices about three times faster than this server.
+.PP
+If more than one USB device matches the vendor:product:serial values the first one found will be used.  There is no indication from \fBftdiJTAG\fR that the match is not unique.
