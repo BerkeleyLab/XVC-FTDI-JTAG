@@ -16,7 +16,7 @@
 .\" do so.
 .TH FTDI_JTAG 1 2020-06-12 "LBNL" "Lawrence Berkeley National Laboratory"
 .SH NAME
-ftdiJTAG \- Xilinx Virtual Cable Server for FTDI 4232H
+ftdiJTAG \- Xilinx Virtual Cable Server for FTDI FT232H/FT2232H/FT4232H
 .SH SYNOPSIS
 .nh
 .ad l
@@ -28,43 +28,51 @@ ftdiJTAG \- Xilinx Virtual Cable Server for FTDI 4232H
 .RB [ \-g\ DirectionValue\fR[\fB:DirectionValue...\fR]\fB ]
 .RB [ \-c\ frequency ]
 .RB [ \-q ]
-.RB [ \-u ]
-.RB [ \-x ]
 .RB [ \-B ]
+.RB [ \-L ]
+.RB [ \-R ]
 .RB [ \-S ]
+.RB [ \-U ]
+.RB [ \-X ]
 .hy
 .SH DESCRIPTION
-This server converts Xilinx Virtual Cable requests to FTDI 4232H-style USB commands.
+This server converts Xilinx Virtual Cable requests to FTDI Multi-Protocol Synchronous Serial Engine USB commands.
 .IP \-a\ address
 Address of network interface on which to listen for connections from XVC clients.  Default is 127.0.0.1 (localhost).  Specify 0.0.0.0 to listen on all networks.
 .IP \-p\ port
 TCP port number on which to listen.  Default is 2542.
 .IP \-d\ vendor:product[:[serial]]
-USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6011, and any serial number.  Vendor and product numbers are in hexadecimal.
+USB vendor, product and optional serial number of the FTDI chip to be used.  Default is vendor 0403, product 6010 (FT2232H) or 6011 (FT4432H) or 6014 (FT232H), and any serial number.  Vendor and product numbers are in hexadecimal.
 .IP \-g\ DirectionValue[:DirectionValue...]
 Colon-separated pairs of hexadecimal values (0x00 to 0xFF) specifying the direction and state
 of the most significant four bits of the FTDI general-purpose I/O port.
 The first value of each pair sets the directions and the
-second value sets the states of the four I/O port bits..
+second value sets the states of the four I/O port bits.
 A one bit in the direction configures the corresponding bit in the port as an output.
 A zero bit in the direction configures the corresponding bit in the port as an input.
 The least significant bit in the direction and state value is applied to bit 4 of the I/O port and the most significant bit to bit 7 of the I/O port.
 By default all four pins are inputs.
-Multiple direcion/state pairs take effect in turn separated
-by about 100 milliseconds.  This is can be used to generate a startup reset pulse, for example.
+Multiple direction/state pairs take effect in turn separated
+by about 100 milliseconds.  This can be used to generate a startup reset pulse, for example.
 .IP \-c\ f
 Lock the JTAG clock at the specified frequency (ignore XVC settck: commands).
 The numeric frequency argument can be followed by a 'k' or an 'M' to multiply the value by 1000 or 1000000, respectively.
 .IP -q
 Quiet mode.  Don't print USB device information on startup nor client connect/disconnect messages during operation.  Useful when running this server in the background or as a daemon.
-.IP -u
-Enable diagnostic messages for USB transactions.
-.IP -x
-Enable diagnostic messages for Xilinx virtual cable transactions.
 .IP -B
 Use FTDI port B as the JTAG interface rather than the default port A.
+.IP -L
+Put JTAG port into loopback mode.
+.IP -R
+Report on runt reply packets, namely those shorter than three bytes.
+Normally these are silently ignored.
+Some FTDI devices return a few 2 byte, modem status only, replies.
 .IP -S
 Show I/O statistics when client disconnects.
+.IP -U
+Enable diagnostic messages for USB transactions.
+.IP -X
+Enable diagnostic messages for Xilinx virtual cable transactions.
 .SH USAGE
 The Xilinx hardware manager does not automatically detect the presence of this server.  The following procedure is required after starting the server.
 .IP Vivado:

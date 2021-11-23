@@ -1,18 +1,15 @@
 INTRODUCTION
 ============
-The Xilinx tools such as Vivado and Vitis communicate with FPGAs through
-a JTAG interface.  Many boards include an FTDI USB/Serial chip that is
-driven through a program (hw_server) that communicates with the Xilinx
-tools using a proprietary protocol.  The tools recognize the FTDI chip
-as a valid target only if it is equipped with a special EEPROM from
-Digilent.
+Xilinx tools such as Vivado and Vitis communicate with FPGAs through a JTAG
+interface and an FTDI USB/Serial chip driven by a Xilinx server (hw_server)
+that communicates with the tools using a proprietary protocol.  The server
+and tools recognize the FTDI chip as a valid target only if it is equipped
+with a special EEPROM from Digilent.
 
 The tools also support an older, documented*, protocol called Xilinx Virtual
-Cable (XVC). Xilinx servers for this protocol also recognize FTDI chips only
-if they are equipped with the Digilent EEPROM.
-
-This server communicates with the Xilinx tools using XVC and works with FTDI
-chips whether or not they are equipped with the Digilent EEPROM.
+Cable (XVC).  The code in this repository provides a server that communicates
+with the Xilinx tools using XVC and works with FTDI chips whether or not they
+are equipped with the Digilent EEPROM.
 
 * Thanks to tmbinc's 2012 reverse-engineering (https://github.com/tmbinc/xvcd)
   and Xilinx's XAPP1251, XVC can now be considered a properly documented and

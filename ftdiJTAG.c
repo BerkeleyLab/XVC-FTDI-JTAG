@@ -31,14 +31,13 @@
 #include <libusb-1.0/libusb.h>
 
 #if (!defined(LIBUSBX_API_VERSION) || (LIBUSBX_API_VERSION < 0x01000102))
-# error "You need to get a newer version of libsb-1.0 (16 at the very least)"
+# error "You need to get a newer version of libusb-1.0 (16 at the very least)"
 #endif
 
-#define XVC_BUFSIZE         2048
-#define USB_SHIFT_LIMIT     1000
+#define XVC_BUFSIZE         1024
 #define FTDI_CLOCK_RATE     60000000
 #define IDSTRING_CAPACITY   100
-#define USB_BUFSIZE         ((USB_SHIFT_LIMIT)*4)
+#define USB_BUFSIZE         512
 
 /* libusb bmRequestType */
 #define BMREQTYPE_OUT (LIBUSB_REQUEST_TYPE_VENDOR | \
@@ -60,7 +59,7 @@
                                 FTDI_PIN_TDI | \
                                 FTDI_PIN_TMS)
 
-/* FTDI commands (first byte of bulk transfer) */
+/* FTDI commands (first byte of bulk write transfer) */
 #define FTDI_MPSSE_BIT_WRITE_TMS                0x40
 #define FTDI_MPSSE_BIT_READ_DATA                0x20
 #define FTDI_MPSSE_BIT_WRITE_DATA               0x10
@@ -101,6 +100,7 @@ typedef struct usbInfo {
      * Diagnostics
      */
     int                    quietFlag;
+    int                    runtFlag;
     int                    loopback;
     int                    showUSB;
     int                    showXVC;
@@ -110,8 +110,12 @@ typedef struct usbInfo {
      * Statistics
      */
     int                    statisticsFlag;
-    uint32_t               shiftCount;
-    uint32_t               chunkCount;
+    int                    largestShiftRequest;
+    int                    largestWriteRequest;
+    int                    largestWriteSent;
+    int                    largestReadRequest;
+    uint64_t               shiftCount;
+    uint64_t               chunkCount;
     uint64_t               bitCount;
 
     /*
@@ -141,7 +145,9 @@ typedef struct usbInfo {
     int                    termChar;
     unsigned char          bTag;
     int                    bulkOutEndpointAddress;
+    int                    bulkOutRequestSize;
     int                    bulkInEndpointAddress;
+    int                    bulkInRequestSize;
 
     /*
      * FTDI info
@@ -155,9 +161,10 @@ typedef struct usbInfo {
     unsigned char          tmsBuf[XVC_BUFSIZE];
     unsigned char          tdiBuf[XVC_BUFSIZE];
     unsigned char          tdoBuf[XVC_BUFSIZE];
-    unsigned int           txCount;
+    int                    txCount;
     unsigned char          ioBuf[USB_BUFSIZE];
     unsigned char          rxBuf[USB_BUFSIZE];
+    unsigned char          cmdBuf[USB_BUFSIZE];
 } usbInfo;
 
 /************************************* MISC ***************************/
@@ -165,7 +172,7 @@ static void
 showBuf(const char *name, const unsigned char *buf, int numBytes)
 {
     int i;
-    printf("%s:", name);
+    printf("%s%4d:", name, numBytes);
     if (numBytes > 40) numBytes = 40;
     for (i = 0 ; i < numBytes ; i++) printf(" %02X", buf[i]);
     printf("\n");
@@ -246,12 +253,36 @@ getEndpoints(usbInfo *usb, const struct libusb_interface_descriptor *iface_desc)
                                                     LIBUSB_TRANSFER_TYPE_BULK) {
             if ((ep->bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) ==
                                                            LIBUSB_ENDPOINT_IN) {
+                if (usb->bulkInEndpointAddress != 0) {
+                    fprintf(stderr, "Too many input endpoints!\n");
+                    exit(10);
+                }
                 usb->bulkInEndpointAddress = ep->bEndpointAddress;
+                usb->bulkInRequestSize = ep->wMaxPacketSize;
+                if ((size_t)usb->bulkInRequestSize > sizeof usb->ioBuf) {
+                    usb->bulkInRequestSize = sizeof usb->ioBuf;
+                }
             }
             else {
+                if (usb->bulkOutEndpointAddress != 0) {
+                    fprintf(stderr, "Too many output endpoints!\n");
+                    exit(10);
+                }
                 usb->bulkOutEndpointAddress = ep->bEndpointAddress;
+                usb->bulkOutRequestSize = ep->wMaxPacketSize;
+                if ((size_t)usb->bulkOutRequestSize > sizeof usb->cmdBuf) {
+                    usb->bulkOutRequestSize = sizeof usb->cmdBuf;
+                }
             }
         }
+    }
+    if (usb->bulkInEndpointAddress == 0) {
+        fprintf(stderr, "No input endpoint!\n");
+        exit(10);
+    }
+    if (usb->bulkOutEndpointAddress == 0) {
+        fprintf(stderr, "No output endpoint!\n");
+        exit(10);
     }
 }
 
@@ -287,8 +318,25 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
             for (k = 0 ; k < iface->num_altsetting ; k++) {
                 const struct libusb_interface_descriptor *iface_desc;
                 iface_desc = &iface->altsetting[k];
-                if ((usb->vendorId == desc.idVendor)
-                 && (usb->productId == desc.idProduct)) {
+                int productMatch = 0;
+                if (usb->productId < 0) {
+                    static const uint16_t validCodes[] = { 0x6010, /* FT2232H */
+                                                           0x6011, /* FT4232H */
+                                                           0x6014  /* FT232H  */
+                                                         };
+                    int nCodes = sizeof validCodes / sizeof validCodes[0];
+                    int p;
+                    for (p = 0 ; p < nCodes ; p++) {
+                        if (desc.idProduct == validCodes[p]) {
+                            productMatch = 1;
+                            break;
+                        }
+                    }
+                }
+                else if (usb->productId == desc.idProduct) {
+                    productMatch = 1;
+                }
+                if ((usb->vendorId == desc.idVendor) && productMatch) {
                     usb->bInterfaceNumber = iface_desc->bInterfaceNumber;
                     usb->bInterfaceProtocol = iface_desc->bInterfaceProtocol;
                     s = libusb_open(dev, &usb->handle);
@@ -301,6 +349,7 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
                                     usb->deviceSerialString) == 0)) {
                             getEndpoints(usb, iface_desc);
                             libusb_free_config_descriptor(config);
+                            usb->productId = desc.idProduct;
                             return 1;
                         }
                         libusb_close(usb->handle);
@@ -330,7 +379,7 @@ usbControl(usbInfo *usb, int bmRequestType, int bRequest, int wValue)
                                        usb->ftdiJTAGindex, NULL, 0, 1000) < 0);
     if (c < 0) {
         fprintf(stderr, "usb_control_transfer failed: %s\n",libusb_strerror(c));
-        return 0;
+        exit(1);
     }
     return 1;
 }
@@ -343,15 +392,22 @@ usbWriteData(usbInfo *usb, unsigned char *buf, int nSend)
     if (usb->showUSB) {
         showBuf("Tx", buf, nSend);
     }
+    if (nSend > usb->largestWriteRequest) {
+        usb->largestWriteRequest = nSend;
+    }
     while (nSend) {
         s = libusb_bulk_transfer(usb->handle, usb->bulkOutEndpointAddress, buf,
-                                                           nSend, &nSent, 1000);
+                                                          nSend, &nSent, 10000);
         if (s) {
-            fprintf(stderr, "Bulk transfer failed: %s\n", libusb_strerror(s));
-            return 0;
+            fprintf(stderr, "Bulk write (%d) failed: %s\n", nSend,
+                                                            libusb_strerror(s));
+            exit(1);
         }
         nSend -= nSent;
         buf += nSent;
+        if (nSent > usb->largestWriteSent) {
+            usb->largestWriteSent = nSent;
+        }
     }
     return 1;
 }
@@ -362,26 +418,35 @@ usbReadData(usbInfo *usb, unsigned char *buf, int nWant)
     int nWanted = nWant;
     const unsigned char *base = buf;
 
+    if (nWant > usb->largestReadRequest) {
+        usb->largestReadRequest = nWant;
+        if ((nWant+2) > usb->bulkInRequestSize) {
+            fprintf(stderr, "usbReadData requested %d, limit is %d.\n",
+                                               nWant+2, usb->bulkInRequestSize);
+            exit(1);
+        }
+    }
     while (nWant) {
         int nRecv, s;
         const unsigned char *src = usb->ioBuf;
         s = libusb_bulk_transfer(usb->handle, usb->bulkInEndpointAddress,
-                                   usb->ioBuf, sizeof usb->ioBuf, &nRecv, 1000);
+                                             usb->ioBuf, nWant+2, &nRecv, 5000);
         if (s) {
-            fprintf(stderr, "Bulk transfer failed: %s\n", libusb_strerror(s));
-            return 0;
+            fprintf(stderr, "Bulk read failed: %s\n", libusb_strerror(s));
+            exit(1);
         }
         if (nRecv <= 2) {
-            fprintf(stderr, "wanted:%d want:%d got:%d", nWanted, nWant, nRecv);
-            if (nRecv >= 1) {
-                fprintf(stderr, " [%02X", src[0]);
-                if (nRecv >= 2) {
-                    fprintf(stderr, " %02X", src[1]);
+            if (usb->runtFlag) {
+                fprintf(stderr, "wanted:%d want:%d got:%d",nWanted,nWant,nRecv);
+                if (nRecv >= 1) {
+                    fprintf(stderr, " [%02X", src[0]);
+                    if (nRecv >= 2) {
+                        fprintf(stderr, " %02X", src[1]);
+                    }
+                    fprintf(stderr, "]");
                 }
-                fprintf(stderr, "]");
+                fprintf(stderr, "\n");
             }
-            fprintf(stderr, "\n");
-            exit(1);
             continue;
         }
         else {
@@ -401,13 +466,13 @@ usbReadData(usbInfo *usb, unsigned char *buf, int nWant)
 }
 
 /************************************* FTDI/JTAG ***************************/
-
 static int
 divisorForFrequency(unsigned int frequency)
 {
     unsigned int divisor;
     unsigned int actual;
     double r;
+    static unsigned int warned = ~0;
 
     if (frequency <= 0) frequency = 1;
     divisor = ((FTDI_CLOCK_RATE / 2) + (frequency - 1)) / frequency;
@@ -419,12 +484,16 @@ divisorForFrequency(unsigned int frequency)
     }
     actual = FTDI_CLOCK_RATE / (2 * divisor);
     r = (double)frequency / actual;
-    if ((r < 0.999) || (r > 1.001)) {
-        fprintf(stderr, "Warning -- %d Hz clock requested, %d Hz actual\n",
+    if (warned != actual) {
+        warned = actual;
+        if ((r < 0.999) || (r > 1.001)) {
+            fprintf(stderr, "Warning -- %d Hz clock requested, %d Hz actual\n",
                                                              frequency, actual);
-    }
-    if (actual < 500000) {
-        fprintf(stderr, "Warning -- %d Hz clock is a slow choice.\n", actual);
+        }
+        if (actual < 500000) {
+            fprintf(stderr, "Warning -- %d Hz clock is a slow choice.\n",
+                                                                        actual);
+        }
     }
     return divisor;
 }
@@ -490,8 +559,8 @@ ftdiInit(usbInfo *usb)
         FTDI_PIN_TMS | FTDI_PIN_TDI | FTDI_PIN_TCK
     };
     if (!usbControl(usb, BMREQTYPE_OUT, BREQ_RESET, WVAL_RESET_RESET)
-     || !usbControl(usb, BMREQTYPE_OUT, BREQ_SET_LATENCY, 0)
      || !usbControl(usb, BMREQTYPE_OUT, BREQ_SET_BITMODE,WVAL_SET_BITMODE_MPSSE)
+     || !usbControl(usb, BMREQTYPE_OUT, BREQ_SET_LATENCY, 2)
      || !usbControl(usb, BMREQTYPE_OUT, BREQ_RESET, WVAL_RESET_PURGE_TX)
      || !usbControl(usb, BMREQTYPE_OUT, BREQ_RESET, WVAL_RESET_PURGE_RX)
      || !ftdiSetClockSpeed(usb, 10000000)
@@ -521,158 +590,183 @@ cmdByte(usbInfo *usb, int byte)
 }
 
 /*
- * Keep USB packet sizes reasonable by transferring a chunk at a time.
  * The USB/JTAG chip can't shift data to TMS and TDI simultaneously
  * so switch between TMS and TDI shift commands as necessary.
+ * Break into chunks small enough to fit in single packet.
  */
 static int
-shiftChunk(usbInfo *usb, int nBits, const unsigned char *tmsBuf,
-                             const unsigned char *tdiBuf, unsigned char *tdoBuf)
+shiftChunks(usbInfo *usb, int nBits)
 {
     int iBit = 0x01, iIndex = 0;
     int cmdBit, cmdIndex, cmdBitcount;
     int tmsBit, tmsBits, tmsState;
-    int rxBitcountIndex = 0;
-    int rxBit, rxIndex = 0, rxWanted = 0;
+    int rxBit, rxIndex;
     int tdoBit = 0x01, tdoIndex = 0;
-    unsigned char cmdBuf[USB_BUFSIZE];
     unsigned short rxBitcounts[USB_BUFSIZE/3];
 
-    usb->chunkCount++;
-    usb->txCount = 0;
     if (usb->loopback) {
         cmdByte(usb, FTDI_ENABLE_LOOPBACK);
     }
     while (nBits) {
-        /*
-         * Stash TMS bits until bit limit reached or TDI would change state
-         */
-        int tdiFirstState = ((tdiBuf[iIndex] & iBit) != 0);
-        cmdBitcount = 0;
-        cmdBit = 0x01;
-        tmsBits = 0;
+        int rxBytesWanted = 0;
+        int rxBitcountIndex = 0;
+        usb->txCount = 0;
+        usb->chunkCount++;
         do {
-            tmsBit = (tmsBuf[iIndex] & iBit) ? cmdBit : 0;
-            tmsBits |= tmsBit;
-            if (iBit == 0x80) {
-                iBit = 0x01;
-                iIndex++;
-            }
-            else {
-                iBit <<= 1;
-            }
-            cmdBitcount++;
-            cmdBit <<= 1;
-        } while ((cmdBitcount < 6) && (cmdBitcount < nBits)
-            && (((tdiBuf[iIndex] & iBit) != 0) == tdiFirstState));
-
-        /*
-         * Duplicate the final TMS bit so the TMS pin holds
-         * its value for subsequent TDI shift commands.
-         * This is why the bit limit above is 6 and not 7.
-         */
-        tmsBits |= (tmsBit << 1);
-        tmsState = (tmsBit != 0);
-
-        /*
-         * Send the TMS bits and TDI value.
-         */
-        cmdByte(usb, FTDI_MPSSE_XFER_TMS_BITS);
-        cmdByte(usb, cmdBitcount - 1);
-        cmdByte(usb, (tdiFirstState << 7) | tmsBits);
-        rxBitcounts[rxBitcountIndex++] = cmdBitcount;
-        rxWanted++;
-        nBits -= cmdBitcount;
-
-        /*
-         * Stash TDI bits until TMS change of state
-         */
-        cmdBitcount = 0;
-        cmdIndex = 0;
-        cmdBit = 0x01;
-        cmdBuf[0] = 0;
-        while (nBits && (((tmsBuf[iIndex] & iBit) != 0) == tmsState)) {
-            if (tdiBuf[iIndex] & iBit) {
-                cmdBuf[cmdIndex] |= cmdBit;
-            }
-            if (cmdBit == 0x80) {
-                cmdBit = 0x01;
-                cmdIndex++;
-                cmdBuf[cmdIndex] = 0;
-            }
-            else {
+            /*
+             * Stash TMS bits until bit limit reached or TDI would change state
+             */
+            int tdiFirstState = ((usb->tdiBuf[iIndex] & iBit) != 0);
+            cmdBitcount = 0;
+            cmdBit = 0x01;
+            tmsBits = 0;
+            do {
+                tmsBit = (usb->tmsBuf[iIndex] & iBit) ? cmdBit : 0;
+                tmsBits |= tmsBit;
+                if (iBit == 0x80) {
+                    iBit = 0x01;
+                    iIndex++;
+                }
+                else {
+                    iBit <<= 1;
+                }
+                cmdBitcount++;
                 cmdBit <<= 1;
+            } while ((cmdBitcount < 6) && (cmdBitcount < nBits)
+                && (((usb->tdiBuf[iIndex] & iBit) != 0) == tdiFirstState));
+
+            /*
+             * Duplicate the final TMS bit so the TMS pin holds
+             * its value for subsequent TDI shift commands.
+             * This is why the bit limit above is 6 and not 7 since
+             * we need space to hold the copy of the final bit.
+             */
+            tmsBits |= (tmsBit << 1);
+            tmsState = (tmsBit != 0);
+
+            /*
+             * Send the TMS bits and TDI value.
+             */
+            cmdByte(usb, FTDI_MPSSE_XFER_TMS_BITS);
+            cmdByte(usb, cmdBitcount - 1);
+            cmdByte(usb, (tdiFirstState << 7) | tmsBits);
+            rxBitcounts[rxBitcountIndex++] = cmdBitcount;
+            rxBytesWanted++;
+            nBits -= cmdBitcount;
+
+            /*
+             * Stash TDI bits until bit limit reached
+             * or TMS change of state
+             * or transmitter buffer capacity reached.
+             */
+            cmdBitcount = 0;
+            cmdIndex = 0;
+            cmdBit = 0x01;
+            usb->cmdBuf[0] = 0;
+            while ((nBits != 0)
+               && (((usb->tmsBuf[iIndex] & iBit) != 0) == tmsState)
+               && ((usb->txCount+(cmdBitcount/8))<(usb->bulkOutRequestSize-5))){
+                if (usb->tdiBuf[iIndex] & iBit) {
+                    usb->cmdBuf[cmdIndex] |= cmdBit;
+                }
+                if (cmdBit == 0x80) {
+                    cmdBit = 0x01;
+                    cmdIndex++;
+                    usb->cmdBuf[cmdIndex] = 0;
+                }
+                else {
+                    cmdBit <<= 1;
+                }
+                if (iBit == 0x80) {
+                    iBit = 0x01;
+                    iIndex++;
+                }
+                else {
+                    iBit <<= 1;
+                }
+                cmdBitcount++;
+                nBits--;
             }
-            if (iBit == 0x80) {
-                iBit = 0x01;
-                iIndex++;
+
+            /*
+             * Send stashed TDI bits
+             */
+            if (cmdBitcount > 0) {
+                int cmdBytes = cmdBitcount / 8;
+                rxBitcounts[rxBitcountIndex++] = cmdBitcount;
+                if (cmdBitcount >= 8) {
+                    int i;
+                    rxBytesWanted += cmdBytes;
+                    cmdBitcount -= cmdBytes * 8;
+                    i = cmdBytes - 1;
+                    cmdByte(usb, FTDI_MPSSE_XFER_TDI_BYTES);
+                    cmdByte(usb, i);
+                    cmdByte(usb, i >> 8);
+                    for (i = 0 ; i < cmdBytes ; i++) {
+                        cmdByte(usb, usb->cmdBuf[i]);
+                    }
+                }
+                if (cmdBitcount) {
+                    rxBytesWanted++;
+                    cmdByte(usb, FTDI_MPSSE_XFER_TDI_BITS);
+                    cmdByte(usb, cmdBitcount - 1);
+                    cmdByte(usb, usb->cmdBuf[cmdBytes]);
+                }
             }
-            else {
-                iBit <<= 1;
-            }
-            cmdBitcount++;
-            nBits--;
+        } while ((nBits != 0)
+              && ((usb->txCount+(cmdBitcount/8))<(usb->bulkOutRequestSize-6)));
+
+        /*
+         * Shift
+         */
+        if (!usbWriteData(usb, usb->ioBuf, usb->txCount)
+         || !usbReadData(usb, usb->rxBuf, rxBytesWanted)) {
+            return 0;
         }
 
         /*
-         * Send stashed TDI bits
+         * Process received data
          */
-        if (cmdBitcount > 0) {
-            int cmdBytes = cmdBitcount / 8;
-            rxBitcounts[rxBitcountIndex++] = cmdBitcount;
-            if (cmdBitcount >= 8) {
-                int i;
-                rxWanted += cmdBytes;
-                cmdBitcount -= cmdBytes * 8;
-                i = cmdBytes - 1;
-                cmdByte(usb, FTDI_MPSSE_XFER_TDI_BYTES);
-                cmdByte(usb, i);
-                cmdByte(usb, i >> 8);
-                for (i = 0 ; i < cmdBytes ; i++) {
-                    cmdByte(usb, cmdBuf[i]);
-                }
+        rxIndex = 0;
+        for (int i = 0 ; i < rxBitcountIndex ; i++) {
+            int rxBitcount = rxBitcounts[i];
+            if (rxBitcount < 8) {
+                rxBit = 0x1 << (8 - rxBitcount);
             }
-            if (cmdBitcount) {
-                rxWanted++;
-                cmdByte(usb, FTDI_MPSSE_XFER_TDI_BITS);
-                cmdByte(usb, cmdBitcount - 1);
-                cmdByte(usb, cmdBuf[cmdBytes]);
-            }
-        }
-    }
-    if (!usbWriteData(usb, usb->ioBuf, usb->txCount)
-     || !usbReadData(usb, usb->rxBuf, rxWanted)) {
-        return 0;
-    }
-    tdoBuf[tdoIndex] = 0;
-    for (int i = 0 ; i < rxBitcountIndex ; i++) {
-        int rxBitcount = rxBitcounts[i];
-        rxBit = 0x01;
-        if (rxBitcount < 8) {
-            rxBit <<= (8 - rxBitcount);
-        }
-        while (rxBitcount--) {
-            if (usb->rxBuf[rxIndex] & rxBit) {
-                tdoBuf[tdoIndex] |= tdoBit;
-            }
-            if (rxBit == 0x80) {
+            else {
                 rxBit = 0x01;
-                if (rxBitcount < 8) {
-                    rxBit <<= (8 - rxBitcount);
+            }
+            while (rxBitcount--) {
+                if (tdoBit == 0x1) {
+                    usb->tdoBuf[tdoIndex] = 0;
                 }
-                rxIndex++;
+                if (usb->rxBuf[rxIndex] & rxBit) {
+                    usb->tdoBuf[tdoIndex] |= tdoBit;
+                }
+                if (rxBit == 0x80) {
+                    if (rxBitcount < 8) {
+                        rxBit = 0x1 << (8 - rxBitcount);
+                    }
+                    else {
+                        rxBit = 0x01;
+                    }
+                    rxIndex++;
+                }
+                else {
+                    rxBit <<= 1;
+                }
+                if (tdoBit == 0x80) {
+                    tdoBit = 0x01;
+                    tdoIndex++;
+                }
+                else {
+                    tdoBit <<= 1;
+                }
             }
-            else {
-                rxBit <<= 1;
-            }
-            if (tdoBit == 0x80) {
-                tdoBit = 0x01;
-                tdoIndex++;
-                tdoBuf[tdoIndex] = 0;
-            }
-            else {
-                tdoBit <<= 1;
-            }
+        }
+        if (rxIndex != rxBytesWanted) {
+            printf("Warning -- consumed %d but supplied %d\n", rxIndex,
+                                                                 rxBytesWanted);
         }
     }
     return 1;
@@ -685,12 +779,12 @@ static int
 shift(usbInfo *usb, FILE *fp)
 {
     uint32_t nBits, nBytes;
-    const unsigned char *tmsBuf = usb->tmsBuf;
-    const unsigned char *tdiBuf = usb->tdiBuf;
-    unsigned char *tdoBuf = usb->tdoBuf;
 
     if (!fetch32(fp, &nBits)) {
         return 0;
+    }
+    if (nBits > (unsigned int)usb->largestShiftRequest) {
+        usb->largestShiftRequest = nBits;
     }
     usb->bitCount += nBits;
     usb->shiftCount++;
@@ -699,8 +793,8 @@ shift(usbInfo *usb, FILE *fp)
         printf("shift:%d\n", (int)nBits);
     }
     if (nBytes > XVC_BUFSIZE) {
-        fprintf(stderr, "Client requested %d, max is %d\n", nBytes,XVC_BUFSIZE);
-        return 0;
+        fprintf(stderr, "Client requested %u, max is %u\n", nBytes,XVC_BUFSIZE);
+        exit(1);
     }
     if ((fread(usb->tmsBuf, 1, nBytes, fp) != nBytes)
      || (fread(usb->tdiBuf, 1, nBytes, fp) != nBytes)) {
@@ -710,23 +804,8 @@ shift(usbInfo *usb, FILE *fp)
         showBuf("TMS", usb->tmsBuf, nBytes);
         showBuf("TDI", usb->tdiBuf, nBytes);
     }
-    while (nBits) {
-        unsigned int shiftBytes, shiftBits;
-        shiftBytes = (nBits + 7) / 8;
-        if (shiftBytes > USB_SHIFT_LIMIT) {
-            shiftBytes = USB_SHIFT_LIMIT;
-        }
-        shiftBits = shiftBytes * 8;
-        if (shiftBits > nBits) {
-            shiftBits = nBits;
-        }
-        if (!shiftChunk(usb, shiftBits, tmsBuf, tdiBuf, tdoBuf)) {
-            return 0;
-        }
-        nBits -= shiftBits;
-        tmsBuf += shiftBytes;
-        tdiBuf += shiftBytes;
-        tdoBuf += shiftBytes;
+    if (!shiftChunks(usb, nBits)) {
+        return 0;
     }
     if (usb->showXVC) {
         showBuf("TDO", usb->tdoBuf, nBytes);
@@ -840,7 +919,7 @@ processCommands(FILE *fp, int fd, usbInfo *usb)
                 if (usb->showXVC) {
                     printf("getinfo:\n");
                 }
-                len = sprintf(cBuf, "xvcServer_v1.0:%d\n", XVC_BUFSIZE);
+                len = sprintf(cBuf, "xvcServer_v1.0:%u\n", XVC_BUFSIZE);
                 if (reply(fd, (unsigned char *)cBuf, len)) {
                     break;
                 }
@@ -945,7 +1024,8 @@ static void
 usage(char *name)
 {
     fprintf(stderr, "Usage: %s [-a address] [-p port] "
-         "[-d vendor:product[:[serial]]] [-g direction:value[:value...]] [-c frequency] [-q] [-u] [-x] [-B] [-S]\n", name);
+     "[-d vendor:product[:[serial]]] [-g direction_value[:direction_value...]] "
+     "[-c frequency] [-q] [-B] [-L] [-R] [-S] [-U] [-X]\n", name);
     exit(2);
 }
 
@@ -1017,12 +1097,12 @@ main(int argc, char **argv)
     char farName[100];
     static usbInfo usbWorkspace = {
         .vendorId = 0x0403,
-        .productId = 0x6011,
+        .productId = -1,
         .ftdiJTAGindex = 1
     };
     usbInfo *usb = &usbWorkspace;
 
-    while ((c = getopt(argc, argv, "a:c:d:g:hp:quxBLS")) >= 0) {
+    while ((c = getopt(argc, argv, "a:b:c:d:g:hp:qBLRSUX")) >= 0) {
         switch(c) {
         case 'a': bindAddress = optarg;                     break;
         case 'c': usb->lockedSpeed = clockSpeed(optarg);    break;
@@ -1035,7 +1115,10 @@ main(int argc, char **argv)
         case 'x': usb->showXVC = 1;                         break;
         case 'B': usb->ftdiJTAGindex = 2;                   break;
         case 'L': usb->loopback = 1;                        break;
+        case 'R': usb->runtFlag = 1;                        break;
         case 'S': usb->statisticsFlag = 1;                  break;
+        case 'U': usb->showUSB = 1;                         break;
+        case 'X': usb->showXVC = 1;                         break;
         default:  usage(argv[0]);
         }
     }
@@ -1086,11 +1169,15 @@ main(int argc, char **argv)
         }
         if (!usb->quietFlag) {
             printf("Disconnect %s\n", farName);
-            if (usb->statisticsFlag) {
-                printf("   Shifts: %" PRIu32 "\n", usb->shiftCount);
-                printf("   Chunks: %" PRIu32 "\n", usb->chunkCount);
-                printf("     Bits: %" PRIu64 "\n", usb->bitCount);
-            }
+        }
+        if (usb->statisticsFlag) {
+            printf("   Shifts: %" PRIu64 "\n", usb->shiftCount);
+            printf("   Chunks: %" PRIu64 "\n", usb->chunkCount);
+            printf("     Bits: %" PRIu64 "\n", usb->bitCount);
+            printf(" Largest shift request: %d\n", usb->largestShiftRequest);
+            printf(" Largest write request: %d\n", usb->largestWriteRequest);
+            printf("Largest write transfer: %d\n", usb->largestWriteSent);
+            printf("  Largest read request: %d\n", usb->largestReadRequest);
         }
         libusb_close(usb->handle);
         usb->handle = NULL;

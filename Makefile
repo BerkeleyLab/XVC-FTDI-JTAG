@@ -24,9 +24,14 @@ INSTALL_MAN = /usr/local/share/man/man1
 #USBLIB_LIB = -L/usr/local/lib
 
 CFLAGS = -g -O2 $(USBLIB_INCLUDE) $(USBLIB_LIB)
+
+# Assorted flags to ensure good coding style and to
+# enable some features from the current millenium.
+# Adjust these as required by what your compiler supports
 CFLAGS += --std=c99 -D_POSIX_C_SOURCE=199309L -D_DEFAULT_SOURCE
 CFLAGS += -Wall -Wextra -pedantic -Wstrict-prototypes -Wmissing-prototypes -Wundef -Wshadow
 CFLAGS += -Wpointer-arith -Wcast-align -Wcast-qual -Wredundant-decls
+
 LDLIBS = -lusb-1.0
 
 all: ftdiJTAG

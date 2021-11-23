@@ -34,5 +34,5 @@ for cmd in (xvcGetinfo, xvcResetTap, xvcShifToID):
     print(sock.recv(100))
 
 sock.send(xvcGetID)
-id = sock.recv(100)
+id = bytearray(sock.recv(100))
 print("%02X%02X%02X%02X"%(id[3], id[2], id[1], id[0]))
