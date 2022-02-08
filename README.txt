@@ -34,11 +34,6 @@ You will have to edit the Makefile if you want to install the executable
 and manual page in non-default locations, or if your C compiler doesn't
 find the libusb header or library.
 
-EXAMPLES
-========
-     LBNL Marble: -c 30M -g 11    (Applies to Marble Mini, too)
-   Xilinx ZCU111: -c 30M -g 44    (-g 40:44 to pulse power-on reset line)
-
 LICENSE
 =======
 XVC FTDI JTAG Copyright (c) 2021, The Regents of the University of 
