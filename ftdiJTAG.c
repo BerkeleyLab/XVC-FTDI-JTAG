@@ -140,7 +140,6 @@ typedef struct usbInfo {
     libusb_context        *usb;
     libusb_device_handle  *handle;
     int                    bInterfaceNumber;
-    int                    bInterfaceProtocol;
     int                    isConnected;
     int                    termChar;
     unsigned char          bTag;
@@ -338,7 +337,6 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
                 }
                 if ((usb->vendorId == desc.idVendor) && productMatch) {
                     usb->bInterfaceNumber = iface_desc->bInterfaceNumber;
-                    usb->bInterfaceProtocol = iface_desc->bInterfaceProtocol;
                     s = libusb_open(dev, &usb->handle);
                     if (s == 0) {
                         usb->deviceVendorId = desc.idVendor;
