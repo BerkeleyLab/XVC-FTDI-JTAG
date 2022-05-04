@@ -291,8 +291,7 @@ getEndpoints(usbInfo *usb, const struct libusb_interface_descriptor *iface_desc)
 static int
 findDevice(usbInfo *usb, libusb_device **list, int n)
 {
-    int i, k;
-
+    int i;
     for (i = 0 ; i < n ; i++) {
         libusb_device *dev = list[i];
         struct libusb_device_descriptor desc;
@@ -312,51 +311,49 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
         if (config == NULL)
             continue;
         if (config->bNumInterfaces >= usb->ftdiJTAGindex) {
-            const struct libusb_interface *iface =
+            int productMatch = 0;
+            if (usb->productId < 0) {
+                static const uint16_t validCodes[] = { 0x6010, /* FT2232H */
+                                                       0x6011, /* FT4232H */
+                                                       0x6014  /* FT232H  */
+                                                     };
+                int nCodes = sizeof validCodes / sizeof validCodes[0];
+                int p;
+                for (p = 0 ; p < nCodes ; p++) {
+                    if (desc.idProduct == validCodes[p]) {
+                        productMatch = 1;
+                        break;
+                    }
+                }
+            }
+            else if (usb->productId == desc.idProduct) {
+                productMatch = 1;
+            }
+            if ((usb->vendorId == desc.idVendor) && productMatch) {
+                s = libusb_open(dev, &usb->handle);
+                if (s == 0) {
+                    const struct libusb_interface *iface =
                                        &config->interface[usb->ftdiJTAGindex-1];
-            for (k = 0 ; k < iface->num_altsetting ; k++) {
-                const struct libusb_interface_descriptor *iface_desc;
-                iface_desc = &iface->altsetting[k];
-                int productMatch = 0;
-                if (usb->productId < 0) {
-                    static const uint16_t validCodes[] = { 0x6010, /* FT2232H */
-                                                           0x6011, /* FT4232H */
-                                                           0x6014  /* FT232H  */
-                                                         };
-                    int nCodes = sizeof validCodes / sizeof validCodes[0];
-                    int p;
-                    for (p = 0 ; p < nCodes ; p++) {
-                        if (desc.idProduct == validCodes[p]) {
-                            productMatch = 1;
-                            break;
-                        }
-                    }
-                }
-                else if (usb->productId == desc.idProduct) {
-                    productMatch = 1;
-                }
-                if ((usb->vendorId == desc.idVendor) && productMatch) {
+                    const struct libusb_interface_descriptor *iface_desc =
+                                                          &iface->altsetting[0];
                     usb->bInterfaceNumber = iface_desc->bInterfaceNumber;
-                    s = libusb_open(dev, &usb->handle);
-                    if (s == 0) {
-                        usb->deviceVendorId = desc.idVendor;
-                        usb->deviceProductId = desc.idProduct;
-                        getDeviceStrings(usb, &desc);
-                        if ((usb->serialNumber == NULL)
-                         || (strcmp(usb->serialNumber,
-                                    usb->deviceSerialString) == 0)) {
-                            getEndpoints(usb, iface_desc);
-                            libusb_free_config_descriptor(config);
-                            usb->productId = desc.idProduct;
-                            return 1;
-                        }
-                        libusb_close(usb->handle);
+                    usb->deviceVendorId = desc.idVendor;
+                    usb->deviceProductId = desc.idProduct;
+                    getDeviceStrings(usb, &desc);
+                    if ((usb->serialNumber == NULL)
+                     || (strcmp(usb->serialNumber,
+                                usb->deviceSerialString) == 0)) {
+                        getEndpoints(usb, iface_desc);
+                        libusb_free_config_descriptor(config);
+                        usb->productId = desc.idProduct;
+                        return 1;
                     }
-                    else {
-                        fprintf(stderr, "libusb_open failed: %s\n",
-                                                            libusb_strerror(s));
-                        exit(1);
-                    }
+                    libusb_close(usb->handle);
+                }
+                else {
+                    fprintf(stderr, "libusb_open failed: %s\n",
+                                                        libusb_strerror(s));
+                    exit(1);
                 }
             }
         }
