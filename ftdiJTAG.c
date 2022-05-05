@@ -296,7 +296,7 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
         libusb_device *dev = list[i];
         struct libusb_device_descriptor desc;
         struct libusb_config_descriptor *config;
-
+        int productMatch = 0;
         int s = libusb_get_device_descriptor(dev, &desc);
         if (s != 0) {
            fprintf(stderr, "libusb_get_device_descriptor failed: %s",
@@ -305,56 +305,61 @@ findDevice(usbInfo *usb, libusb_device **list, int n)
         }
         if (desc.bDeviceClass != LIBUSB_CLASS_PER_INTERFACE)
             continue;
+        if (usb->productId < 0) {
+            static const uint16_t validCodes[] = { 0x6010, /* FT2232H */
+                                                   0x6011, /* FT4232H */
+                                                   0x6014  /* FT232H  */
+                                                 };
+            int nCodes = sizeof validCodes / sizeof validCodes[0];
+            int p;
+            for (p = 0 ; p < nCodes ; p++) {
+                if (desc.idProduct == validCodes[p]) {
+                    productMatch = 1;
+                    break;
+                }
+            }
+        }
+        else if (usb->productId == desc.idProduct) {
+            productMatch = 1;
+        }
+        if ((usb->vendorId != desc.idVendor) || !productMatch) {
+            continue;
+        }
         if ((libusb_get_active_config_descriptor(dev, &config) < 0)
-         && (libusb_get_config_descriptor(dev, 0, &config) < 0))
+         && (libusb_get_config_descriptor(dev, 0, &config) < 0)) {
+            fprintf(stderr,
+                          "Can't get vendor %04X product %04X configuration.\n",
+                                                 desc.idVendor, desc.idProduct);
             continue;
-        if (config == NULL)
+        }
+        if (config == NULL) {
             continue;
+        }
         if (config->bNumInterfaces >= usb->ftdiJTAGindex) {
-            int productMatch = 0;
-            if (usb->productId < 0) {
-                static const uint16_t validCodes[] = { 0x6010, /* FT2232H */
-                                                       0x6011, /* FT4232H */
-                                                       0x6014  /* FT232H  */
-                                                     };
-                int nCodes = sizeof validCodes / sizeof validCodes[0];
-                int p;
-                for (p = 0 ; p < nCodes ; p++) {
-                    if (desc.idProduct == validCodes[p]) {
-                        productMatch = 1;
-                        break;
-                    }
-                }
-            }
-            else if (usb->productId == desc.idProduct) {
-                productMatch = 1;
-            }
-            if ((usb->vendorId == desc.idVendor) && productMatch) {
-                s = libusb_open(dev, &usb->handle);
-                if (s == 0) {
-                    const struct libusb_interface *iface =
+            s = libusb_open(dev, &usb->handle);
+            if (s == 0) {
+                const struct libusb_interface *iface =
                                        &config->interface[usb->ftdiJTAGindex-1];
-                    const struct libusb_interface_descriptor *iface_desc =
+                const struct libusb_interface_descriptor *iface_desc =
                                                           &iface->altsetting[0];
-                    usb->bInterfaceNumber = iface_desc->bInterfaceNumber;
-                    usb->deviceVendorId = desc.idVendor;
-                    usb->deviceProductId = desc.idProduct;
-                    getDeviceStrings(usb, &desc);
-                    if ((usb->serialNumber == NULL)
-                     || (strcmp(usb->serialNumber,
-                                usb->deviceSerialString) == 0)) {
-                        getEndpoints(usb, iface_desc);
-                        libusb_free_config_descriptor(config);
-                        usb->productId = desc.idProduct;
-                        return 1;
-                    }
-                    libusb_close(usb->handle);
+                usb->bInterfaceNumber = iface_desc->bInterfaceNumber;
+                usb->deviceVendorId = desc.idVendor;
+                usb->deviceProductId = desc.idProduct;
+                getDeviceStrings(usb, &desc);
+                if ((usb->serialNumber == NULL)
+                 || (strcmp(usb->serialNumber,
+                            usb->deviceSerialString) == 0)) {
+                    getEndpoints(usb, iface_desc);
+                    libusb_free_config_descriptor(config);
+                    usb->productId = desc.idProduct;
+                    return 1;
                 }
-                else {
-                    fprintf(stderr, "libusb_open failed: %s\n",
-                                                        libusb_strerror(s));
-                    exit(1);
-                }
+                libusb_close(usb->handle);
+            }
+            else {
+                fprintf(stderr, "libusb_open failed: %s\n",
+                                                    libusb_strerror(s));
+                exit(1);
             }
         }
         libusb_free_config_descriptor(config);
@@ -370,9 +375,9 @@ usbControl(usbInfo *usb, int bmRequestType, int bRequest, int wValue)
         printf("usbControl bmRequestType:%02X bRequest:%02X wValue:%04X\n",
                                                bmRequestType, bRequest, wValue);
     }
-    c = (libusb_control_transfer(usb->handle, bmRequestType, bRequest, wValue,
-                                       usb->ftdiJTAGindex, NULL, 0, 1000) < 0);
-    if (c < 0) {
+    c = libusb_control_transfer(usb->handle, bmRequestType, bRequest, wValue,
+                                             usb->ftdiJTAGindex, NULL, 0, 1000);
+    if (c != 0) {
         fprintf(stderr, "usb_control_transfer failed: %s\n",libusb_strerror(c));
         exit(1);
     }
@@ -986,7 +991,7 @@ connectUSB(usbInfo *usb)
         if (s < 0) {
             fprintf(stderr, "libusb_kernel_driver_active() failed: %s\n", libusb_strerror(s));
         }
-        if (s) {
+        else if (s) {
             s = libusb_detach_kernel_driver(usb->handle, usb->bInterfaceNumber);
             if (s) {
                 fprintf(stderr, "libusb_detach_kernel_driver() failed: %s\n", libusb_strerror(s));
