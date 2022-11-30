@@ -98,6 +98,8 @@ Open the XSCT console.
 Enter the command 'connect -xvc-url localhost:2542' (substitute the appropriate host and port information if the server is not using the defaults).
 .br
 Specify the 'Local' connection when offered the option, for example in the 'Program FPGA' window.
+.SH USE\ WITH\ DOCKER
+I run the Xilinx tools in a Linux Docker container on my OS X machine.  To allow them to connect to the JTAG port of my development hardware I run ftdiJTAG on the OS X machine as normal, but in the Vivado 'Add Xilinx Virtual Cable (XVC)' window I specify the host as 'host.docker.internal' rather than the default 'localhost'.
 .SH REFERENCES
 .nh
 .IP 1. 3em
