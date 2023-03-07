@@ -529,7 +529,7 @@ ftdiGPIO(usbInfo *usb)
             break;
         }
         str = endp + 1;
-        if (value > 0xFFF) {
+        if (value > 0xFF) {
             break;
         }
         direction = value >> 4;
