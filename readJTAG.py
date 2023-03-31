@@ -22,14 +22,13 @@ import socket
 import time
 
 xvcGetinfo = bytearray(b'getinfo:')
-xvcResetTap = bytearray(b'shift:\x06\x00\x00\x00\x1F\x3F')
-xvcShifToID = bytearray(b'shift:\x05\x00\x00\x00\x02\x1F')
+xvcResetTapAndGoToShiftDR = bytearray(b'shift:\x09\x00\x00\x00\x5F\x00\x00\x00')
 xvcGetID = bytearray(b'shift:\x20\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect(("127.0.0.1", 2542))
 
-for cmd in (xvcGetinfo, xvcResetTap, xvcShifToID):
+for cmd in (xvcGetinfo, xvcResetTapAndGoToShiftDR):
     sock.send(cmd)
     print(sock.recv(100))
 
