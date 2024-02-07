@@ -567,10 +567,6 @@ ftdiInit(usbInfo *usb)
      || !usbWriteData(usb, startup, sizeof startup)) {
         return 0;
     }
-    if (!ftdiSetClockSpeed(usb, usb->lockedSpeed ? usb->lockedSpeed
-                                                 : FTDI_CLOCK_RATE / 2)) {
-        return 0;
-    }
     if (usb->gpioArgument && !ftdiGPIO(usb)) {
         fprintf(stderr, "Bad -g direction:value[:value...]\n");
         return 0;
